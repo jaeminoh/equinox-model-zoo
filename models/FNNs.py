@@ -7,6 +7,23 @@ from jaxtyping import PRNGKeyArray, Float, ArrayLike, jaxtyped
 from beartype import beartype
 
 
+class RationalActivation(eqx.Module):
+    """
+    Comes from https://github.com/NBoulle/RationalNets/blob/master/src/PyTorch%20implementation/rational.py
+    """
+
+    P: jnp.array
+    Q: jnp.array
+
+    def __init__(self):
+        self.P = jnp.array([1.1915, 1.5957, 0.5, 0.0218])
+        self.Q = jnp.array([2.383, 0.0, 1.0])
+
+    def __call__(self, x):
+        x = jnp.power(x, jnp.arange(3, -1, -1))
+        return (self.P @ x) / (self.Q @ x[1:])
+
+
 class MultiLayerPerceptron(eqx.Module):
     layers: list
 
@@ -58,9 +75,7 @@ class Siren(MultiLayerPerceptron):
         return self.layers[-1](x)
 
 
-
 def _siren_init(mlp: MultiLayerPerceptron, key: PRNGKeyArray = jr.key(4123)):
-
     def init_weight(layer: eqx.nn.Linear, is_first: bool, key: PRNGKeyArray):
         assert isinstance(layer, eqx.nn.Linear)
         d_out, d_in = layer.weight.shape
@@ -70,7 +85,7 @@ def _siren_init(mlp: MultiLayerPerceptron, key: PRNGKeyArray = jr.key(4123)):
             scale = jnp.sqrt(6 / d_in) / mlp.w0
         W = jr.uniform(key, (d_out, d_in), minval=-1, maxval=1) * scale
         return W
-    
+
     def init_bias(layer: eqx.nn.Linear, key: PRNGKeyArray):
         assert isinstance(layer, eqx.nn.Linear)
         d_out, d_in = layer.weight.shape
@@ -87,20 +102,16 @@ def _siren_init(mlp: MultiLayerPerceptron, key: PRNGKeyArray = jr.key(4123)):
             return isinstance(x, eqx.nn.Linear)
 
         params = [
-            x.weight
-            for x in jtu.tree_leaves(mlp, is_leaf=is_linear)
-            if is_linear(x)
+            x.weight for x in jtu.tree_leaves(mlp, is_leaf=is_linear) if is_linear(x)
         ]
         return params
-    
+
     def get_biases(mlp: MultiLayerPerceptron):
         def is_linear(x):
             return isinstance(x, eqx.nn.Linear)
 
         params = [
-            x.bias
-            for x in jtu.tree_leaves(mlp, is_leaf=is_linear)
-            if is_linear(x)
+            x.bias for x in jtu.tree_leaves(mlp, is_leaf=is_linear) if is_linear(x)
         ]
         return params
 
@@ -116,10 +127,10 @@ def _siren_init(mlp: MultiLayerPerceptron, key: PRNGKeyArray = jr.key(4123)):
 def convert_mlp_to_siren(net: eqx.Module, key=jr.key(4321)):
     def is_mlp(mlp: MultiLayerPerceptron):
         return isinstance(mlp, MultiLayerPerceptron)
-    
+
     def get_mlps(net: eqx.Module):
-       return [x for x in jtu.tree_leaves(net, is_mlp) if is_mlp(x)]
-    
+        return [x for x in jtu.tree_leaves(net, is_mlp) if is_mlp(x)]
+
     mlps = get_mlps(net)
     num_mlps = len(mlps)
     keys = jr.split(key, num_mlps)
